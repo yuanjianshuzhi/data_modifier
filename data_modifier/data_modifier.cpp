@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <set>
 #include <regex>   // 新增，用于解析标准 INCLUDE 格式
+#include <cstring>   // 新增，用于字符串处理
 
 const size_t BUF_SIZE = 4096;
 
@@ -57,9 +58,11 @@ void collectIncludeFiles(const std::filesystem::path& filePath,
 
         // 检测是否是旧格式的 "INCLUDE" 行（前后可带空格）
         std::string trimmed = line;
+        
         trimmed.erase(0, trimmed.find_first_not_of(" \t"));
         trimmed.erase(trimmed.find_last_not_of(" \t") + 1);
-        if (trimmed == "INCLUDE") {
+        if (trimmed.find("INCLUDE")!= std::string::npos ||
+            trimmed.find("GDFILE") != std::string::npos) {
             in_include = true;
         }
     }
@@ -74,7 +77,7 @@ int main(int argc, char** argv)
     }
     std::string planJson = argv[1];
 
-    //std::string planJson = "D:/plan/param_plan2/action1.json";
+    //std::string planJson = "E:/GitHub/agent_terminal/tests/param_plan1/action.json";
     std::filesystem::path planPath(planJson);
     std::filesystem::path dir  = planPath.parent_path();
     std::filesystem::path fDir = planPath.parent_path().parent_path();
@@ -197,11 +200,34 @@ int main(int argc, char** argv)
             return EXIT_FAILURE;
         }
         std::string target_file_str = mod[KEY_TARGET_FILE].get<std::string>();
+        // 统一分隔符
+        std::replace(target_file_str.begin(), target_file_str.end(), '\\', '/');
         std::filesystem::path targetPath = dir / target_file_str;
         std::filesystem::path tmpPath = dir / (target_file_str + ".tmp");
 
         // 1. 打开原文件（只读二进制）
-        std::ifstream in_file(targetPath);
+        //std::ifstream in_file(targetPath);
+
+
+        if (!std::filesystem::exists(targetPath)) {
+            std::cerr << "错误：目标文件不存在 - " << targetPath << std::endl;
+            return EXIT_FAILURE;
+        }
+        if (!std::filesystem::is_regular_file(targetPath)) {
+            std::cerr << "错误：路径不是普通文件 - " << targetPath << std::endl;
+            return EXIT_FAILURE;
+        }
+
+        std::ifstream in_file;
+        in_file.exceptions(std::ifstream::badbit);
+        try {
+            in_file.open(targetPath);
+        }
+        catch (const std::ios_base::failure& e) {
+            std::cerr << "打开文件失败: " << e.what() << std::endl;
+            return EXIT_FAILURE;
+        }
+
         if (!in_file.is_open()) {
             std::cerr << "原文件打开失败！" << targetPath<< std::endl;
             return EXIT_FAILURE;
